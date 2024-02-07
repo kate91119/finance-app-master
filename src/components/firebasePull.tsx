@@ -1,6 +1,6 @@
 import { collection, getDocs, query, where, Firestore } from "@firebase/firestore";
 import { firestore } from "../components/firebase";
-import { addDoc } from "firebase/firestore";
+import { addDoc, doc, updateDoc } from "firebase/firestore";
 
 
 type test = {
@@ -14,14 +14,19 @@ export type BalanceData = {
 };
 
 
-// Function to retrieve numbers from Firestore
-const fetchBalances = async (): Promise<number[]> => {
-    const testCollection = collection(firestore, "test");
+// Function to retrieve numbers from Firebase
+const fetchBalances = async (): Promise<{ id: string, balance: number }[]> => {
+    const testCollection = collection(firestore, "test"); //reference to 'test' collection
 
     try {
+        //fetch documents from firerstore
         const querySnapshot = await getDocs(testCollection);
-        const balances = querySnapshot.docs.map(doc => doc.data().balance as number);
-        return balances;
+        //map through documents to get id and balance
+        const balances = querySnapshot.docs.map(doc => ({
+            id: doc.id, //document id
+            balance: doc.data().balance as number //balance value
+        }));
+        return balances; //returns array of balances
     } catch (err) {
         console.error("Error fetching balances:", err);
         return [];
@@ -30,13 +35,26 @@ const fetchBalances = async (): Promise<number[]> => {
 
 export { fetchBalances };
 
+//adds new balance to firebase
+export const pushNumber = async (entry: { balance: number }) => {
+    const ref = collection(firestore, "test"); // test is collection name
+    try {
+        //adds new document with entered data
+        const docRef = await addDoc(ref, entry);
+        console.log("Document written with ID: ", docRef.id);
+    } catch (e) {
+        console.error("Error adding document: ", e);
+    }
+};
 
 const sumAllBalances = async (): Promise<number> => {
-    const testCollection = collection(firestore, "test"); // Ensure collection name is correct
+    const testCollection = collection(firestore, "test"); //test is name of collection
     let sum = 0;
 
     try {
+        //fetch all documents from collection
         const querySnapshot = await getDocs(testCollection);
+        //sums balance values
         querySnapshot.forEach(doc => {
             const balance = doc.data().balance;
             if (typeof balance === 'number') { // Make sure balance is a number
@@ -47,7 +65,7 @@ const sumAllBalances = async (): Promise<number> => {
         return sum;
     } catch (err) {
         console.error("Error fetching and summing balances:", err);
-        return 0; // Return 0 or handle the error as needed
+        return 0; 
     }
 };
 
@@ -61,14 +79,21 @@ type TestData = {
 const handleSubmit = async (testdata: TestData) => {
     const ref = collection(firestore, "test");
 
-    let data = {
-        balance: testdata
-    };
-
     try {
-        await addDoc(ref, data);
+        await addDoc(ref, testdata); // Directly use testdata here
     } catch(err) {
-        console.error(err);
+        console.error("Error adding document:", err);
+    }
+};
+
+
+export const updateBalance = async (id: string, newBalance: number): Promise<void> => {
+    const docRef = doc(firestore, "test", id);
+    try {
+        await updateDoc(docRef, { balance: newBalance });
+        console.log("Balance updated successfully");
+    } catch (err) {
+        console.error("Error updating balance:", err);
     }
 };
 

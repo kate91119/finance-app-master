@@ -1,87 +1,123 @@
 import React, { useState, useEffect } from 'react';
 import { IonContent, IonHeader, IonPage, IonTitle, IonToolbar, IonInput, IonButton, IonItem, IonLabel, IonSegment, IonSegmentButton } from '@ionic/react';
-import pushNumber from '../components/firebasePull'; 
+import { fetchBalances, updateBalance, pushNumber } from '../components/firebasePull';
 import './Tab2.css';
-import { fetchBalances} from '../components/firebasePull';
-
 
 const Tab2: React.FC = () => {
-  const [numberInput, setNumberInput] = useState<string>('');
-  const [transactionType, setTransactionType] = useState<string>('deposit'); // State to track transaction type
+    const [numberInput, setNumberInput] = useState<string>(''); //for managing transaction input
+    const [transactionType, setTransactionType] = useState<string>('deposit'); //for tracking transaction type
+    const [editId, setEditId] = useState<string | null>(null); //for identifying transaction being edited
+    const [editValue, setEditValue] = useState<string>(''); //for value being edited
+    const [numbers, setNumbers] = useState<{ id: string, balance: number }[]>([]); // for storing transactions to database
 
-  const [numbers, setNumbers] = useState<number[]>([]);
-  useEffect(() => {
 
-    const fetchAndSetNumbers = async () => {
-      const fetchedNumbers = await fetchBalances();
-      setNumbers(fetchedNumbers);   
-    };  
-    fetchAndSetNumbers();
-  }, []);
+    //hook to fetch transactions
+    useEffect(() => {
+        const fetchAndSetNumbers = async () => {
+            const fetchedNumbers = await fetchBalances();
+            setNumbers(fetchedNumbers);
+        };
+        fetchAndSetNumbers();
+        
+    }, []);
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const number = parseFloat(numberInput);
+    //initiate editing of transactions
+    const startEditing = (id: string, balance: number) => {
+        setEditId(id);
+        setEditValue(balance.toString());
+    };
 
-    // Check transaction type and number validity
-    if (transactionType === 'deposit' && number >= 0) {
-      await pushNumber(number);
-      setNumberInput('');
-    } else if (transactionType === 'withdraw' && number < 0) {
-      await pushNumber(number );
-      setNumberInput('');
-    }else if(transactionType === 'withdraw' && number > 0) {
-      await pushNumber(number *-1);
-      setNumberInput('');
-      } else {
-      alert('Please enter a valid number for the selected transaction type.');
-    }
-};
-
-  let status = Boolean;
-  return (
-    <IonPage>
-      <IonHeader>
-        <IonToolbar>
-          <IonTitle>Add Transaction</IonTitle>
-        </IonToolbar>
-      </IonHeader>
-      <IonContent fullscreen>
-      <>
-          <IonSegment value={transactionType} class="transactionBar" onIonChange={e => setTransactionType(String(e.detail.value))}>
-            <IonSegmentButton value="deposit" class="depWith">
-              <IonLabel>Deposit</IonLabel>
-            </IonSegmentButton>
-            <IonSegmentButton value="withdraw" class="depWith">
-              <IonLabel>Withdraw</IonLabel>
-            </IonSegmentButton>
-          </IonSegment>
-        </>
-        {/* Other content, if any */}
-        <form onSubmit={handleSubmit}>
-          <IonItem>
-            <IonInput 
-              className='transactionInput'
-              type="text" 
-              value={numberInput} 
-              placeholder="Enter Value of Transaction" 
-              onIonChange={e => setNumberInput(e.detail.value!)} 
-            />
-          </IonItem>
-          <IonButton expand="block" type="submit" className='submitNum'>Submit Number</IonButton>
-        </form>
-        <>
-        <ul className="recentTransaction">
-          {numbers.map((number, index) => (
-            <li key={index}>{number}</li>
+    //save edit to database
+    const saveEdit = async (id: string) => {
+        const updatedNumber = parseFloat(editValue);
+        if (!isNaN(updatedNumber)) {
+            await updateBalance(id, updatedNumber);
+            setEditId(null);
+            setEditValue('');
+            fetchAndSetNumbers(); // Refresh the data - currently not working
             
-          ))}
-        </ul>
+        }
+        
+    };
 
-    </>
-      </IonContent>
-    </IonPage>
-  );
+    //form submission for adding or updating transactions
+    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      const number = parseFloat(numberInput);
+
+      //logic to handle deposit or withdraw
+      if (transactionType === 'deposit' || (transactionType === 'withdraw' && number <= 0 || number >=0)) { // Ensure correct logic for transaction type and number
+          if (editId) {
+            //updating exisiting transaction if editing
+              await updateBalance(editId, transactionType === 'withdraw' ? -Math.abs(number) : number);
+          } else {
+            // add new transacation if not editing
+              await pushNumber({ balance: transactionType === 'withdraw' ? -Math.abs(number) : number });
+          }
+          //resets fields after submission
+          setNumberInput('');
+          setEditId(null);
+      } else {
+          alert('Please enter a valid number for the selected transaction type.');
+      }
+      window.location.reload();
+  };
+
+    return (
+        <IonPage>
+            <IonHeader>
+                <IonToolbar>
+                    <IonTitle>Add Transaction</IonTitle>
+                </IonToolbar>
+            </IonHeader>
+            <IonContent fullscreen>
+            <IonSegment value={transactionType} onIonChange={e => setTransactionType(e.detail.value as string ?? 'deposit')}>
+                    <IonSegmentButton value="deposit">
+                        <IonLabel>Deposit</IonLabel>
+                    </IonSegmentButton>
+                    <IonSegmentButton value="withdraw">
+                        <IonLabel>Withdraw</IonLabel>
+                    </IonSegmentButton>
+                </IonSegment>
+                <form onSubmit={handleSubmit}>
+                    <IonItem>
+                        <IonInput
+                            type="number"
+                            value={numberInput}
+                            placeholder="Enter Value of Transaction"
+                            onIonChange={e => setNumberInput(e.detail.value!)}
+                        />
+                    </IonItem>
+                    <IonButton expand="block" type="submit">Submit Number</IonButton>
+                </form>
+                <ul>
+                    {numbers.map(({ id, balance }) => (
+                        <IonItem key={id}>
+                            {editId === id ? (
+                                <IonInput
+                                    value={editValue}
+                                    onIonChange={(e) => setEditValue(e.detail.value!)}
+                                    
+                                />
+                            ) : (
+                                <IonLabel>{balance}</IonLabel>
+                            )}
+                            <IonButton onClick={() => startEditing(id, balance)}>Edit</IonButton>
+                            
+                            {editId === id && (
+                                <IonButton onClick={() => saveEdit(id) }>Save</IonButton>
+                                
+                            )}
+                        </IonItem>
+                    ))}
+                </ul>
+            </IonContent>
+        </IonPage>
+    );
 };
 
 export default Tab2;
+function fetchAndSetNumbers() {
+  throw new Error('Function not implemented.');
+}
+
